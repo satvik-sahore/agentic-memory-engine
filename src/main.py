@@ -4,9 +4,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
+from pathlib import Path
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
 from src.config import settings
 from src.db.qdrant import qdrant_manager
 from src.api.routes import router as memory_router
+from src.api.chat import router as chat_router
 
 # Configure logging
 logging.basicConfig(
@@ -14,6 +19,8 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 @asynccontextmanager
@@ -46,22 +53,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount Static Assets
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
 # Include Routers
 app.include_router(memory_router)
+app.include_router(chat_router)
 
 
 @app.get("/", tags=["System"])
-def root():
-    """Root metadata endpoint."""
+def root_dashboard():
+    """Serves the Interactive Visual Memory Explorer & Chat Playground."""
+    index_file = STATIC_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
     return {
         "name": "Self-Learning AI Agent Memory Service",
         "version": "0.1.0",
         "docs_url": "/docs",
+        "dashboard_url": "/dashboard",
         "status": "online",
-        "provider": settings.provider,
-        "extraction_model": settings.extraction_model,
-        "embedding_model": settings.embedding_model,
     }
+
+
+@app.get("/dashboard", tags=["System"])
+def dashboard_view():
+    """Serves the Interactive Visual Memory Explorer & Chat Playground."""
+    index_file = STATIC_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+    return {"message": "Static dashboard files not found."}
 
 
 @app.get("/healthz", tags=["System"])
