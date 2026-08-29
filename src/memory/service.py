@@ -10,6 +10,7 @@ from src.db.qdrant import qdrant_manager
 from src.llm.client import llm_client
 from src.memory.extractor import fact_extractor
 from src.memory.reconciler import memory_reconciler
+from src.memory.decay import calculate_temporal_decay, compute_composite_score
 from src.memory.models import (
     MemoryRecord,
     MemoryOperationType,
@@ -86,6 +87,8 @@ class MemoryService:
                     "fact": op.fact,
                     "created_at": now_str,
                     "updated_at": now_str,
+                    "last_accessed_at": now_str,
+                    "access_count": 0,
                 }
                 self.db.client.upsert(
                     collection_name=self.collection_name,
@@ -106,6 +109,8 @@ class MemoryService:
                     "user_id": user_id,
                     "fact": op.fact,
                     "updated_at": now_str,
+                    "last_accessed_at": now_str,
+                    "access_count": 0,
                 }
                 # Qdrant upsert with existing ID replaces the point
                 self.db.client.upsert(
@@ -142,11 +147,14 @@ class MemoryService:
         score_threshold: Optional[float] = None,
     ) -> List[MemoryRecord]:
         """
-        Performs semantic vector search across a specific user's memories.
+        Performs semantic vector search blended with Ebbinghaus temporal decay recency weighting.
+        Also performs spaced repetition reinforcement on retrieved memories.
         """
         threshold = score_threshold if score_threshold is not None else settings.similarity_threshold
         query_vector = self.llm.embed_text(query)
 
+        # Retrieve a slightly wider pool of candidates to re-rank with temporal decay
+        fetch_limit = max(limit * 2, 10)
         results = self.db.client.query_points(
             collection_name=self.collection_name,
             query=query_vector,
@@ -158,27 +166,73 @@ class MemoryService:
                     )
                 ]
             ),
-            limit=limit,
+            limit=fetch_limit,
             score_threshold=threshold,
         )
 
         records = []
+        now_str = datetime.now(timezone.utc).isoformat()
+
         for point in results.points:
+            created_at = point.payload.get("created_at", "")
+            last_accessed_at = point.payload.get("last_accessed_at")
+            access_count = point.payload.get("access_count", 0)
+
+            # Compute temporal decay and composite score
+            recency_score, freshness_label = calculate_temporal_decay(
+                created_at_iso=created_at,
+                last_accessed_at_iso=last_accessed_at,
+                half_life_days=settings.decay_half_life_days,
+            )
+
+            if settings.enable_temporal_decay and point.score is not None:
+                composite = compute_composite_score(
+                    vector_similarity=point.score,
+                    recency_score=recency_score,
+                    recency_weight=settings.recency_weight,
+                )
+            else:
+                composite = point.score
+
             records.append(
                 MemoryRecord(
                     id=str(point.id),
                     user_id=point.payload.get("user_id", user_id),
                     fact=point.payload.get("fact", ""),
                     category=point.payload.get("category", "other"),
-                    created_at=point.payload.get("created_at", ""),
+                    created_at=created_at,
                     updated_at=point.payload.get("updated_at"),
+                    last_accessed_at=last_accessed_at,
+                    access_count=access_count,
                     score=point.score,
+                    recency_score=recency_score,
+                    freshness_label=freshness_label,
+                    composite_score=composite,
                 )
             )
-        return records
+
+        # Re-rank candidates by composite score descending
+        records.sort(key=lambda r: (r.composite_score if r.composite_score is not None else 0.0), reverse=True)
+        top_records = records[:limit]
+
+        # Spaced Reinforcement: Touch top retrieved memories to refresh retention
+        for r in top_records:
+            try:
+                self.db.client.set_payload(
+                    collection_name=self.collection_name,
+                    payload={
+                        "last_accessed_at": now_str,
+                        "access_count": r.access_count + 1,
+                    },
+                    points=[r.id],
+                )
+            except Exception:
+                pass
+
+        return top_records
 
     def get_all_memories(self, user_id: str, limit: int = 100) -> List[MemoryRecord]:
-        """Retrieves all active memory records for a given user."""
+        """Retrieves all active memory records with freshness metadata for a given user."""
         points, _ = self.db.client.scroll(
             collection_name=self.collection_name,
             scroll_filter=rest_models.Filter(
@@ -196,14 +250,28 @@ class MemoryService:
 
         records = []
         for point in points:
+            created_at = point.payload.get("created_at", "")
+            last_accessed_at = point.payload.get("last_accessed_at")
+            access_count = point.payload.get("access_count", 0)
+
+            recency_score, freshness_label = calculate_temporal_decay(
+                created_at_iso=created_at,
+                last_accessed_at_iso=last_accessed_at,
+                half_life_days=settings.decay_half_life_days,
+            )
+
             records.append(
                 MemoryRecord(
                     id=str(point.id),
                     user_id=point.payload.get("user_id", user_id),
                     fact=point.payload.get("fact", ""),
                     category=point.payload.get("category", "other"),
-                    created_at=point.payload.get("created_at", ""),
+                    created_at=created_at,
                     updated_at=point.payload.get("updated_at"),
+                    last_accessed_at=last_accessed_at,
+                    access_count=access_count,
+                    recency_score=recency_score,
+                    freshness_label=freshness_label,
                 )
             )
         return records

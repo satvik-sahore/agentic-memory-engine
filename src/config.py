@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     # Memory Engine Pipeline Thresholds
     similarity_threshold: float = 0.60
     max_search_limit: int = 5
+    enable_temporal_decay: bool = True
+    recency_weight: float = 0.20
+    decay_half_life_days: float = 30.0
 
     # Server Settings
     host: str = "0.0.0.0"

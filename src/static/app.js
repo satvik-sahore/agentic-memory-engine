@@ -165,15 +165,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     memoryList.innerHTML = memories.map((m) => {
       const cat = m.category ? m.category.toLowerCase() : 'other';
+      const freshness = m.freshness_label || '🔥 Fresh';
       let simHtml = '';
-      if (isSearchMode && m.score !== undefined && m.score !== null) {
-        const pct = Math.min(Math.round(m.score * 100), 100);
+
+      if (isSearchMode && m.composite_score !== undefined && m.composite_score !== null) {
+        const compPct = Math.min(Math.round(m.composite_score * 100), 100);
+        const simPct = m.score ? Math.min(Math.round(m.score * 100), 100) : compPct;
         simHtml = `
           <div class="sim-bar-container">
             <div class="sim-bar-bg">
-              <div class="sim-bar-fill" style="width: ${pct}%;"></div>
+              <div class="sim-bar-fill" style="width: ${compPct}%;"></div>
             </div>
-            <span class="sim-score">${pct}% match</span>
+            <span class="sim-score" title="Blended Composite Rank (Vector Match ${simPct}% + Recency)">${compPct}% rank</span>
           </div>
         `;
       }
@@ -181,7 +184,10 @@ document.addEventListener('DOMContentLoaded', () => {
       return `
         <div class="memory-card" data-id="${m.id}">
           <div class="memory-header">
-            <span class="category-tag ${cat}">${cat}</span>
+            <div style="display: flex; align-items: center; gap: 0.4rem;">
+              <span class="category-tag ${cat}">${cat}</span>
+              <span class="freshness-badge">${freshness}</span>
+            </div>
             <button class="btn-delete-mem" onclick="window.deleteSingleMemory('${m.id}')" title="Delete fact">
               ✕
             </button>
@@ -190,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
           ${simHtml}
           <div class="memory-meta">
             <span>ID: ${m.id.slice(0, 8)}...</span>
-            <span>${m.created_at ? new Date(m.created_at).toLocaleDateString() : 'Persisted'}</span>
+            <span>Recalled ${m.access_count || 0}x</span>
           </div>
         </div>
       `;

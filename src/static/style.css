@@ -438,6 +438,16 @@ body {
 .category-tag.constraint { background: rgba(244, 63, 94, 0.15); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.3); }
 .category-tag.other { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.3); }
 
+.freshness-badge {
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+}
+
 .memory-text {
   font-size: 0.9rem;
   line-height: 1.45;

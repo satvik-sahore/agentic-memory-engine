@@ -65,7 +65,12 @@ class MemoryRecord(BaseModel):
     category: str = "other"
     created_at: str
     updated_at: Optional[str] = None
-    score: Optional[float] = None
+    last_accessed_at: Optional[str] = None
+    access_count: int = 0
+    score: Optional[float] = None              # Raw vector cosine similarity
+    recency_score: Optional[float] = None      # Temporal decay score R(t)
+    freshness_label: Optional[str] = None      # Human readable freshness (e.g. "🔥 Fresh (Today)")
+    composite_score: Optional[float] = None    # Blended ranking score
 
 
 class AddMemoryResponse(BaseModel):

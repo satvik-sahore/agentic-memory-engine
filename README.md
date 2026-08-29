@@ -57,6 +57,11 @@ flowchart TD
 * **🧠 Dynamic Two-Phase Lifecycle**: 
   1. *Extraction*: Extracts durable, self-contained third-person facts while discarding conversational noise.
   2. *Reconciliation*: Semantic lookup finds candidate conflicts; LLM decides `ADD`, `UPDATE`, `DELETE`, or `NOOP`.
+* **⏳ Cognitive Temporal Decay (Ebbinghaus Forgetting Curve)**:
+  - Mathematical recency weighting: $\text{Score} = (1 - w) \cdot \text{Similarity} + w \cdot e^{-\lambda \Delta t}$.
+  - Spaced reinforcement: Automatically touches and refreshes retention every time a memory is recalled.
+* **📊 Interactive Visual Memory Explorer & AI Chat Playground**:
+  - Full-featured dark-mode web dashboard (`/dashboard`) with live chat playground, real-time memory bank feed, and similarity confidence meters.
 * **🔌 Dual Serving Interfaces**:
   - **FastAPI REST Endpoints**: High-performance HTTP service with OpenAPI docs (`/docs`).
   - **Model Context Protocol (MCP 2.x)**: Plug-and-play tools (`remember_conversation`, `recall_memories`, `forget_memory`) for Claude Desktop, Cursor, and agentic workflows.
