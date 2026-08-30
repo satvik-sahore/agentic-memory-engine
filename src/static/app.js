@@ -407,15 +407,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function ensureCanvasSize() {
+    const w = graphContainer.clientWidth || 600;
+    const h = graphContainer.clientHeight || 450;
+    graphCanvas.width = Math.max(w, 300);
+    graphCanvas.height = Math.max(h, 300);
+  }
+
   function setupCanvas() {
-    const resize = () => {
-      if (graphContainer.clientWidth > 0 && graphContainer.clientHeight > 0) {
-        graphCanvas.width = graphContainer.clientWidth;
-        graphCanvas.height = graphContainer.clientHeight;
-      }
-    };
-    window.addEventListener('resize', resize);
-    resize();
+    window.addEventListener('resize', ensureCanvasSize);
+    ensureCanvasSize();
 
     // Mouse Interaction for Dragging Nodes
     graphCanvas.addEventListener('mousedown', (e) => {
@@ -424,8 +425,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const y = e.clientY - rect.top;
 
       for (let n of graphNodes) {
+        if (!isFinite(n.x) || !isFinite(n.y)) continue;
         const dist = Math.hypot(n.x - x, n.y - y);
-        if (dist <= n.radius + 6) {
+        if (dist <= (n.radius || 14) + 8) {
           draggedNode = n;
           break;
         }
@@ -449,29 +451,41 @@ document.addEventListener('DOMContentLoaded', () => {
   function initGraphSimulation(data) {
     if (animationFrameId) cancelAnimationFrame(animationFrameId);
 
-    const width = graphCanvas.width || 500;
-    const height = graphCanvas.height || 400;
+    ensureCanvasSize();
+    const width = Math.max(graphCanvas.width, 300);
+    const height = Math.max(graphCanvas.height, 300);
     const centerX = width / 2;
     const centerY = height / 2;
 
-    // Initialize node positions in a radial circle
+    if (!data.nodes || data.nodes.length === 0) {
+      graphNodes = [];
+      graphEdges = [];
+      const ctx = graphCanvas.getContext('2d');
+      ctx.clearRect(0, 0, width, height);
+      return;
+    }
+
+    // Initialize node positions in a radial circle with non-zero offsets
     const numNodes = data.nodes.length;
     graphNodes = data.nodes.map((n, i) => {
-      const angle = (i / Math.max(numNodes, 1)) * Math.PI * 2;
-      const r = n.type === 'user' ? 0 : 100 + Math.random() * 80;
+      const angle = (i / Math.max(numNodes, 1)) * Math.PI * 2 + (Math.random() * 0.1);
+      const r = n.type === 'user' ? 0 : 80 + (i % 3) * 35;
+      const initX = centerX + Math.cos(angle) * r;
+      const initY = centerY + Math.sin(angle) * r;
+
       return {
         ...n,
-        x: centerX + Math.cos(angle) * r,
-        y: centerY + Math.sin(angle) * r,
+        x: isFinite(initX) ? initX : centerX + (i * 20),
+        y: isFinite(initY) ? initY : centerY + (i * 20),
         vx: 0,
         vy: 0,
-        radius: n.size || 14,
+        radius: Math.max(Number(n.size) || 14, 8),
       };
     });
 
     // Map Edges
     const nodeById = new Map(graphNodes.map(n => [n.id, n]));
-    graphEdges = data.edges.map(e => ({
+    graphEdges = (data.edges || []).map(e => ({
       ...e,
       sourceNode: nodeById.get(e.source),
       targetNode: nodeById.get(e.target),
@@ -483,12 +497,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function runSimulationLoop() {
     const ctx = graphCanvas.getContext('2d');
-    const width = graphCanvas.width;
-    const height = graphCanvas.height;
-    const centerX = width / 2;
-    const centerY = height / 2;
 
     function step() {
+      ensureCanvasSize();
+      const width = Math.max(graphCanvas.width, 300);
+      const height = Math.max(graphCanvas.height, 300);
+      const centerX = width / 2;
+      const centerY = height / 2;
+
       // 1. Clear Canvas
       ctx.clearRect(0, 0, width, height);
 
@@ -498,10 +514,10 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let j = i + 1; j < graphNodes.length; j++) {
           const n1 = graphNodes[i];
           const n2 = graphNodes[j];
-          const dx = n2.x - n1.x;
-          const dy = n2.y - n1.y;
-          const dist = Math.max(Math.hypot(dx, dy), 1);
-          const force = (8000 / (dist * dist));
+          const dx = (n2.x - n1.x) || (Math.random() * 2 - 1);
+          const dy = (n2.y - n1.y) || (Math.random() * 2 - 1);
+          const dist = Math.max(Math.hypot(dx, dy), 10);
+          const force = Math.min(6000 / (dist * dist), 15);
           const fx = (dx / dist) * force;
           const fy = (dy / dist) * force;
 
@@ -510,15 +526,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      // Spring attraction on edges (Hooke's Law)
+      // Spring attraction on edges
       for (let edge of graphEdges) {
         const s = edge.sourceNode;
         const t = edge.targetNode;
-        const dx = t.x - s.x;
-        const dy = t.y - s.y;
-        const dist = Math.hypot(dx, dy);
-        const desiredDist = 130;
-        const springForce = (dist - desiredDist) * 0.04;
+        if (!s || !t) continue;
+        const dx = (t.x - s.x) || 1;
+        const dy = (t.y - s.y) || 1;
+        const dist = Math.max(Math.hypot(dx, dy), 1);
+        const desiredDist = 110;
+        const springForce = (dist - desiredDist) * 0.03;
         const fx = (dx / dist) * springForce;
         const fy = (dy / dist) * springForce;
 
@@ -526,15 +543,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (t !== draggedNode) { t.vx -= fx; t.vy -= fy; }
       }
 
-      // Centering Gravity
+      // Centering Gravity & Position Update
       for (let n of graphNodes) {
         if (n !== draggedNode) {
-          n.vx += (centerX - n.x) * 0.015;
-          n.vy += (centerY - n.y) * 0.015;
-          n.vx *= 0.85; // Damping
-          n.vy *= 0.85;
-          n.x += n.vx;
-          n.y += n.vy;
+          n.vx = (n.vx + (centerX - n.x) * 0.01) * 0.82;
+          n.vy = (n.vy + (centerY - n.y) * 0.01) * 0.82;
+
+          if (isFinite(n.vx)) n.x += n.vx;
+          if (isFinite(n.vy)) n.y += n.vy;
+
+          // Keep within bounds
+          n.x = Math.max(n.radius + 10, Math.min(width - n.radius - 10, n.x));
+          n.y = Math.max(n.radius + 10, Math.min(height - n.radius - 10, n.y));
         }
       }
 
@@ -542,11 +562,11 @@ document.addEventListener('DOMContentLoaded', () => {
       for (let edge of graphEdges) {
         const s = edge.sourceNode;
         const t = edge.targetNode;
+        if (!s || !t || !isFinite(s.x) || !isFinite(s.y) || !isFinite(t.x) || !isFinite(t.y)) continue;
 
-        // Line
         ctx.beginPath();
-        ctx.strokeStyle = 'rgba(99, 102, 241, 0.25)';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(99, 102, 241, 0.3)';
+        ctx.lineWidth = 1.5;
         ctx.moveTo(s.x, s.y);
         ctx.lineTo(t.x, t.y);
         ctx.stroke();
@@ -555,38 +575,47 @@ document.addEventListener('DOMContentLoaded', () => {
         if (edge.label) {
           const midX = (s.x + t.x) / 2;
           const midY = (s.y + t.y) / 2;
-          ctx.font = '10px JetBrains Mono, monospace';
+          ctx.font = '9px JetBrains Mono, monospace';
           ctx.fillStyle = '#94a3b8';
           ctx.textAlign = 'center';
-          ctx.fillText(edge.label, midX, midY - 4);
+          ctx.fillText(edge.label, midX, midY - 3);
         }
       }
 
       // 4. Draw Nodes
       for (let n of graphNodes) {
-        // Glowing Halo
-        const grad = ctx.createRadialGradient(n.x, n.y, n.radius * 0.5, n.x, n.y, n.radius * 1.8);
-        grad.addColorStop(0, n.color || '#6366f1');
-        grad.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.beginPath();
-        ctx.fillStyle = grad;
-        ctx.arc(n.x, n.y, n.radius * 1.8, 0, Math.PI * 2);
-        ctx.fill();
+        if (!isFinite(n.x) || !isFinite(n.y)) continue;
+
+        const rad = Math.max(n.radius || 14, 8);
+        const color = n.color || '#6366f1';
+
+        // Glowing Halo with finite checks
+        try {
+          const grad = ctx.createRadialGradient(n.x, n.y, Math.max(rad * 0.4, 1), n.x, n.y, Math.max(rad * 1.8, 2));
+          grad.addColorStop(0, color);
+          grad.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.beginPath();
+          ctx.fillStyle = grad;
+          ctx.arc(n.x, n.y, rad * 1.8, 0, Math.PI * 2);
+          ctx.fill();
+        } catch (e) {
+          // Fallback if gradient error
+        }
 
         // Node Circle
         ctx.beginPath();
-        ctx.fillStyle = n.color || '#6366f1';
-        ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.arc(n.x, n.y, rad, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1.5;
         ctx.stroke();
 
-        // Label
+        // Node Label Text
         ctx.font = '11px Outfit, sans-serif';
         ctx.fillStyle = '#f8fafc';
         ctx.textAlign = 'center';
-        ctx.fillText(n.label, n.x, n.y + n.radius + 14);
+        ctx.fillText(n.label || '', n.x, n.y + rad + 14);
       }
 
       animationFrameId = requestAnimationFrame(step);
