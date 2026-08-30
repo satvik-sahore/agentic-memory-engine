@@ -104,8 +104,18 @@ class QdrantManager:
 
         if col_name in existing_names:
             col_info = self.client.get_collection(collection_name=col_name)
-            current_dim = col_info.config.params.vectors.size
-            if current_dim != dim:
+            current_dim = None
+            vectors_config = col_info.config.params.vectors
+
+            if isinstance(vectors_config, rest_models.VectorParams):
+                current_dim = vectors_config.size
+            elif isinstance(vectors_config, dict) and vectors_config:
+                first_val = next(iter(vectors_config.values()))
+                current_dim = getattr(first_val, "size", None)
+            elif hasattr(vectors_config, "size"):
+                current_dim = getattr(vectors_config, "size", None)
+
+            if current_dim is not None and current_dim != dim:
                 if recreate_if_dim_mismatch:
                     logger.warning(
                         f"Collection '{col_name}' vector dimension mismatch (existing: {current_dim}, expected: {dim}). "
@@ -115,7 +125,7 @@ class QdrantManager:
                 else:
                     logger.warning(f"Collection '{col_name}' has dimension {current_dim} (expected {dim}).")
                     return False
-            else:
+            elif current_dim is not None and current_dim == dim:
                 logger.info(f"Collection '{col_name}' is ready with dimension {dim}.")
                 return False
 
