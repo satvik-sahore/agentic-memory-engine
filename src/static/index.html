@@ -132,6 +132,11 @@
       <!-- Interactive Knowledge Graph Canvas Container (Active by default) -->
       <div id="graphContainer" class="graph-container" style="display: flex;">
         <canvas id="graphCanvas"></canvas>
+        <div class="graph-controls">
+          <button id="btnZoomIn" class="graph-ctrl-btn" title="Zoom In">+</button>
+          <button id="btnZoomOut" class="graph-ctrl-btn" title="Zoom Out">−</button>
+          <button id="btnZoomReset" class="graph-ctrl-btn" title="Reset View">⟲</button>
+        </div>
         <div class="graph-legend">
           <span class="legend-item"><span class="dot user"></span> User</span>
           <span class="legend-item"><span class="dot profile"></span> Profile</span>
@@ -139,7 +144,12 @@
           <span class="legend-item"><span class="dot preference"></span> Preference</span>
           <span class="legend-item"><span class="dot project"></span> Project</span>
         </div>
-        <div class="graph-hint">Drag nodes to reposition • GraphRAG Topology</div>
+        <div class="graph-hint">Scroll to Zoom • Drag Canvas/Nodes • Hover for Details</div>
+        <div id="graphTooltip" class="graph-tooltip">
+          <span id="tooltipBadge" class="tooltip-badge">Profile</span>
+          <div id="tooltipTitle" class="tooltip-title">Node Title</div>
+          <div id="tooltipFact" class="tooltip-fact">Full memory fact statement goes here...</div>
+        </div>
       </div>
     </section>
 
@@ -148,6 +158,6 @@
   <!-- Toast Notification Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/static/app.js?v=5"></script>
+  <script src="/static/app.js?v=6"></script>
 </body>
 </html>

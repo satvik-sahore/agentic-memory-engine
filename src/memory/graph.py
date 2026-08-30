@@ -40,6 +40,7 @@ def build_user_knowledge_graph(memories: List[MemoryRecord], user_id: str = "Use
     for mem in memories:
         cat = (mem.category or "other").lower()
         color = category_colors.get(cat, "#94a3b8")
+        fact_text = mem.fact
 
         # 1. Process explicit Entity Triples if present
         if mem.triples:
@@ -52,22 +53,49 @@ def build_user_knowledge_graph(memories: List[MemoryRecord], user_id: str = "Use
                     continue
 
                 if sub not in nodes_map:
-                    nodes_map[sub] = {"id": sub, "label": sub, "type": "entity", "size": 14, "color": "#6366f1" if sub.lower() in ["user", user_id.lower()] else color}
+                    nodes_map[sub] = {
+                        "id": sub,
+                        "label": _shorten_label(sub),
+                        "full_text": fact_text if sub != user_node_id else user_node_id,
+                        "type": "entity",
+                        "size": 14,
+                        "color": "#6366f1" if sub.lower() in ["user", user_id.lower()] else color,
+                    }
                 if obj not in nodes_map:
-                    nodes_map[obj] = {"id": obj, "label": obj, "type": cat, "size": 14, "color": color}
+                    nodes_map[obj] = {
+                        "id": obj,
+                        "label": _shorten_label(obj),
+                        "full_text": fact_text,
+                        "type": cat,
+                        "size": 14,
+                        "color": color,
+                    }
 
                 _add_edge(sub, obj, rel, edges, seen_edge_keys)
 
         # 2. Smart Multi-Hop Extraction & Semantic Entity Linking from text
         else:
-            fact_text = mem.fact
             entities, relations = _extract_multihop_entities(fact_text, user_node_id, cat)
 
             for sub, rel, obj, node_type in relations:
                 if sub not in nodes_map:
-                    nodes_map[sub] = {"id": sub, "label": sub, "type": "entity", "size": 14, "color": "#6366f1" if sub.lower() in ["user", user_id.lower()] else color}
+                    nodes_map[sub] = {
+                        "id": sub,
+                        "label": _shorten_label(sub),
+                        "full_text": fact_text if sub != user_node_id else user_node_id,
+                        "type": "entity",
+                        "size": 14,
+                        "color": "#6366f1" if sub.lower() in ["user", user_id.lower()] else color,
+                    }
                 if obj not in nodes_map:
-                    nodes_map[obj] = {"id": obj, "label": obj, "type": node_type or cat, "size": 14, "color": category_colors.get(node_type or cat, color)}
+                    nodes_map[obj] = {
+                        "id": obj,
+                        "label": _shorten_label(obj),
+                        "full_text": fact_text,
+                        "type": node_type or cat,
+                        "size": 14,
+                        "color": category_colors.get(node_type or cat, color),
+                    }
 
                 _add_edge(sub, obj, rel, edges, seen_edge_keys)
 
@@ -118,6 +146,21 @@ def _clean_entity(text: str) -> str:
     if cleaned.lower() in ["user", "the user", "he", "him"]:
         return "User"
     return cleaned[:30]
+
+
+def _shorten_label(text: str) -> str:
+    """Creates a clean, short 2-3 word entity badge label for canvas visualization."""
+    cleaned = text.strip().rstrip(".,")
+    if cleaned.lower() in ["user", "the user"]:
+        return "User"
+    # Filter common sentence prefixes
+    cleaned = re.sub(r"^(?:User\s+is\s+|User\s+has\s+|User\s+plans\s+to\s+|User\s+|is\s+|plans\s+to\s+)", "", cleaned, flags=re.IGNORECASE)
+    if len(cleaned) <= 18:
+        return cleaned
+    words = cleaned.split()
+    if len(words) > 3:
+        return " ".join(words[:3]) + "…"
+    return cleaned[:18] + "…"
 
 
 def _clean_relation(rel: str) -> str:
