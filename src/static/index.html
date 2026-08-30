@@ -86,8 +86,8 @@
       <div class="panel-header">
         <div class="panel-title">
           <div class="view-switcher">
-            <button id="btnViewCards" class="view-tab active">🗂️ Cards View</button>
-            <button id="btnViewGraph" class="view-tab">🕸️ Graph View</button>
+            <button id="btnViewGraph" class="view-tab active">🕸️ Graph View</button>
+            <button id="btnViewCards" class="view-tab">🗂️ Cards View</button>
           </div>
           <span id="memoryCountBadge" style="font-size: 0.75rem; background: rgba(99,102,241,0.2); color: #a5b4fc; padding: 0.15rem 0.5rem; border-radius: var(--radius-full); margin-left: 0.3rem;">0 facts</span>
         </div>
@@ -107,8 +107,8 @@
         <button class="scope-pill" data-scope="workspace">🏢 Workspace (Team)</button>
       </div>
 
-      <!-- Semantic Search Bar (Cards View) -->
-      <div id="searchContainer" class="search-container">
+      <!-- Semantic Search Bar (Cards View - Hidden by default) -->
+      <div id="searchContainer" class="search-container" style="display: none;">
         <div class="search-bar">
           <span>🔍</span>
           <input 
@@ -120,8 +120,8 @@
         </div>
       </div>
 
-      <!-- Memory Card Feed -->
-      <div id="memoryList" class="memory-list">
+      <!-- Memory Card Feed (Hidden by default) -->
+      <div id="memoryList" class="memory-list" style="display: none;">
         <div class="empty-state">
           <div class="empty-icon">🌱</div>
           <p>No memories stored for this user yet.</p>
@@ -129,8 +129,8 @@
         </div>
       </div>
 
-      <!-- Interactive Knowledge Graph Canvas Container (Hidden by default) -->
-      <div id="graphContainer" class="graph-container" style="display: none;">
+      <!-- Interactive Knowledge Graph Canvas Container (Active by default) -->
+      <div id="graphContainer" class="graph-container" style="display: flex;">
         <canvas id="graphCanvas"></canvas>
         <div class="graph-legend">
           <span class="legend-item"><span class="dot user"></span> User</span>
@@ -148,6 +148,6 @@
   <!-- Toast Notification Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/static/app.js?v=4"></script>
+  <script src="/static/app.js?v=5"></script>
 </body>
 </html>

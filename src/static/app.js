@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let currentUserId = userSelect.value;
   let currentScope = 'all';
-  let currentView = 'cards'; // 'cards' | 'graph'
+  let currentView = 'graph'; // Default to Graph View
   let chatHistory = [];
   let isSearching = false;
 
@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function init() {
     checkHealth();
-    loadUserMemories(currentUserId);
+    loadUserKnowledgeGraph(currentUserId);
     bindEvents();
     setupCanvas();
   }
