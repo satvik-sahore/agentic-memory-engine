@@ -67,11 +67,13 @@ INSTRUCTIONS:
 """
 
         # Step 3: Call LLM for conversational response
+        history_list = request.history or []
+
         if settings.provider == "gemini":
             full_prompt = f"User: {request.message}"
-            if request.history:
+            if history_list:
                 history_text = "\n".join(
-                    [f"{h.get('role', 'user').capitalize()}: {h.get('content', '')}" for h in request.history[-4:]]
+                    [f"{h.get('role', 'user').capitalize()}: {h.get('content', '')}" for h in history_list[-4:]]
                 )
                 full_prompt = f"Recent History:\n{history_text}\n\nUser: {request.message}"
 
@@ -81,14 +83,14 @@ INSTRUCTIONS:
             )
             reply = response.text or "I understand."
         else:
-            messages = [{"role": "system", "content": system_instruction}]
-            for h in request.history[-4:]:
+            messages: List[Dict[str, Any]] = [{"role": "system", "content": system_instruction}]
+            for h in history_list[-4:]:
                 messages.append({"role": h.get("role", "user"), "content": h.get("content", "")})
             messages.append({"role": "user", "content": request.message})
 
             response = llm_client.openai.chat.completions.create(
                 model=settings.extraction_model,
-                messages=messages,
+                messages=messages,  # type: ignore
             )
             reply = response.choices[0].message.content or "I understand."
 

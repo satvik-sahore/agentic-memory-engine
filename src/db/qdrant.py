@@ -36,7 +36,11 @@ class QdrantManager:
     def client(self) -> QdrantClient:
         """Lazy initialization of Qdrant client with automatic fallback."""
         if self._client is None:
-            if self.prefer_embedded:
+            if self.host == ":memory:" or self.storage_path == ":memory:":
+                logger.info("Initializing Qdrant in transient in-memory mode (:memory:)")
+                self._client = QdrantClient(":memory:")
+                self._is_embedded = True
+            elif self.prefer_embedded:
                 logger.info(f"Initializing Qdrant in embedded local mode at '{self.storage_path}'")
                 self._client = QdrantClient(path=self.storage_path)
                 self._is_embedded = True

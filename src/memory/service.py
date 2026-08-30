@@ -174,9 +174,10 @@ class MemoryService:
         now_str = datetime.now(timezone.utc).isoformat()
 
         for point in results.points:
-            created_at = point.payload.get("created_at", "")
-            last_accessed_at = point.payload.get("last_accessed_at")
-            access_count = point.payload.get("access_count", 0)
+            payload = point.payload or {}
+            created_at = payload.get("created_at", "")
+            last_accessed_at = payload.get("last_accessed_at")
+            access_count = payload.get("access_count", 0)
 
             # Compute temporal decay and composite score
             recency_score, freshness_label = calculate_temporal_decay(
@@ -197,11 +198,11 @@ class MemoryService:
             records.append(
                 MemoryRecord(
                     id=str(point.id),
-                    user_id=point.payload.get("user_id", user_id),
-                    fact=point.payload.get("fact", ""),
-                    category=point.payload.get("category", "other"),
+                    user_id=payload.get("user_id", user_id),
+                    fact=payload.get("fact", ""),
+                    category=payload.get("category", "other"),
                     created_at=created_at,
-                    updated_at=point.payload.get("updated_at"),
+                    updated_at=payload.get("updated_at"),
                     last_accessed_at=last_accessed_at,
                     access_count=access_count,
                     score=point.score,
@@ -250,9 +251,10 @@ class MemoryService:
 
         records = []
         for point in points:
-            created_at = point.payload.get("created_at", "")
-            last_accessed_at = point.payload.get("last_accessed_at")
-            access_count = point.payload.get("access_count", 0)
+            payload = point.payload or {}
+            created_at = payload.get("created_at", "")
+            last_accessed_at = payload.get("last_accessed_at")
+            access_count = payload.get("access_count", 0)
 
             recency_score, freshness_label = calculate_temporal_decay(
                 created_at_iso=created_at,
@@ -263,11 +265,11 @@ class MemoryService:
             records.append(
                 MemoryRecord(
                     id=str(point.id),
-                    user_id=point.payload.get("user_id", user_id),
-                    fact=point.payload.get("fact", ""),
-                    category=point.payload.get("category", "other"),
+                    user_id=payload.get("user_id", user_id),
+                    fact=payload.get("fact", ""),
+                    category=payload.get("category", "other"),
                     created_at=created_at,
-                    updated_at=point.payload.get("updated_at"),
+                    updated_at=payload.get("updated_at"),
                     last_accessed_at=last_accessed_at,
                     access_count=access_count,
                     recency_score=recency_score,

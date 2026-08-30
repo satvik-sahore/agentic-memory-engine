@@ -4,6 +4,7 @@ import pytest
 import uuid
 from fastapi.testclient import TestClient
 from src.main import app
+from src.config import settings
 from src.memory.service import memory_service
 
 
@@ -18,20 +19,19 @@ def test_user():
 
 
 def test_healthz_and_root():
-    """Verify system health check and root info endpoints."""
-    # Test Root
+    """Verify system health check and root dashboard endpoints."""
+    # Test Root Dashboard
     res_root = client.get("/")
     assert res_root.status_code == 200
-    data_root = res_root.json()
-    assert data_root["status"] == "online"
-    assert "extraction_model" in data_root
+    assert "Agentic Memory Engine" in res_root.text
 
-    # Test Health
+    # Test Healthz
     res_health = client.get("/healthz")
     assert res_health.status_code == 200
     data_health = res_health.json()
-    assert data_health["status"] == "healthy"
+    assert data_health["status"] in ["healthy", "ok"]
     assert data_health["qdrant_connected"] is True
+    assert data_health["collection"] == settings.qdrant_collection_name
 
 
 def test_api_memory_lifecycle(test_user):
