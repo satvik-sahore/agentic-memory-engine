@@ -49,6 +49,8 @@ class MemoryReconciler:
                     operation=MemoryOperationType.ADD,
                     fact=fact.text,
                     category=fact.category.value if hasattr(fact.category, "value") else str(fact.category),
+                    scope=fact.scope,
+                    triples=fact.triples,
                     target_memory_id=None,
                     reason="Initial memory record insertion (no existing memories found).",
                 )
