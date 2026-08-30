@@ -342,16 +342,41 @@ document.addEventListener('DOMContentLoaded', () => {
       chatHistory.push({ role: 'assistant', content: data.reply });
 
       if (data.async_job_id) {
-        showToast(`⚡ Enqueued async memory job`);
-        // Trigger gentle auto-refresh after background worker completes
-        setTimeout(() => {
-          refreshActiveView();
-        }, 1500);
+        showToast(`⚡ Extracting & reconciling in background...`);
+        pollJobStatus(data.async_job_id);
       }
 
     } catch (err) {
       document.getElementById(typingId)?.remove();
       appendMessageBubble('assistant', `⚠️ Sorry, I encountered an error: ${err.message}`);
+    }
+  }
+
+  // Poll Async Ingestion Job Status
+  async function pollJobStatus(jobId, attempts = 0) {
+    if (attempts >= 15) return; // Stop after 15 attempts (9s)
+
+    try {
+      const res = await fetch(`/v1/memories/jobs/${encodeURIComponent(jobId)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+
+      if (data.status === 'completed') {
+        const ops = data.operations || [];
+        const validOps = ops.filter(o => o.operation !== 'NOOP');
+        if (validOps.length > 0) {
+          validOps.forEach(op => {
+            showToast(`⚡ [${op.operation}] ${op.fact}`);
+          });
+        }
+        // Auto-refresh active view (Cards or Graph) instantly
+        refreshActiveView();
+      } else {
+        // Poll again in 600ms
+        setTimeout(() => pollJobStatus(jobId, attempts + 1), 600);
+      }
+    } catch (e) {
+      // Ignore polling transient network errors
     }
   }
 

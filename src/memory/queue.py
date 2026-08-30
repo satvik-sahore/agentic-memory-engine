@@ -16,6 +16,8 @@ class IngestionJob(BaseModel):
     scope: MemoryScope = MemoryScope.USER
     session_id: Optional[str] = None
     workspace_id: Optional[str] = None
+    status: str = "pending"
+    operations_result: List[Any] = Field(default_factory=list)
 
 
 class AsyncMemoryQueue:
@@ -25,6 +27,7 @@ class AsyncMemoryQueue:
         self._queue: Optional[asyncio.Queue] = None
         self._worker_task: Optional[asyncio.Task] = None
         self._is_running: bool = False
+        self._jobs: Dict[str, IngestionJob] = {}
 
     def start(self):
         """Starts the background worker loop."""
@@ -59,17 +62,23 @@ class AsyncMemoryQueue:
         """Enqueues a new conversation ingestion job asynchronously without blocking."""
         if self._queue is None:
             self._queue = asyncio.Queue()
-        
+
         job = IngestionJob(
             user_id=user_id,
             conversation=conversation,
             scope=scope,
             session_id=session_id,
             workspace_id=workspace_id,
+            status="pending",
         )
+        self._jobs[job.id] = job
         await self._queue.put(job)
         logger.debug(f"Enqueued async ingestion job [{job.id}] for user: {user_id}")
         return job.id
+
+    def get_job_status(self, job_id: str) -> Optional[IngestionJob]:
+        """Returns the current status of an async ingestion job."""
+        return self._jobs.get(job_id)
 
     async def _worker_loop(self):
         """Continuous background worker processing ingestion jobs."""
@@ -82,10 +91,11 @@ class AsyncMemoryQueue:
                     continue
 
                 job: IngestionJob = await self._queue.get()
+                job.status = "processing"
                 logger.info(f"⚡ Processing async memory job [{job.id}] for {job.user_id}...")
 
                 # Run heavy extraction & reconciliation off the main request thread
-                await asyncio.to_thread(
+                result = await asyncio.to_thread(
                     memory_service.process_conversation,
                     user_id=job.user_id,
                     conversation=job.conversation,
@@ -94,8 +104,10 @@ class AsyncMemoryQueue:
                     workspace_id=job.workspace_id,
                 )
 
+                job.status = "completed"
+                job.operations_result = result.operations_performed
                 self._queue.task_done()
-                logger.info(f"✅ Async memory job [{job.id}] completed.")
+                logger.info(f"✅ Async memory job [{job.id}] completed with {len(job.operations_result)} ops.")
 
             except asyncio.CancelledError:
                 break

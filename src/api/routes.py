@@ -37,6 +37,27 @@ class ClearUserMemoriesResponse(BaseModel):
     deleted_count: int
 
 
+@router.get(
+    "/jobs/{job_id}",
+    summary="Get Async Ingestion Job Status",
+)
+def get_job_status(job_id: str):
+    """Checks whether a background memory extraction job is pending, processing, or completed."""
+    from src.memory.queue import async_memory_queue
+    job = async_memory_queue.get_job_status(job_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job {job_id} not found",
+        )
+    return {
+        "job_id": job.id,
+        "status": job.status,
+        "user_id": job.user_id,
+        "operations": job.operations_result,
+    }
+
+
 @router.post(
     "/process",
     response_model=AddMemoryResponse,
