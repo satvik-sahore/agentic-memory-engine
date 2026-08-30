@@ -218,6 +218,10 @@ class MemoryService:
 
         for point in results.points:
             payload = point.payload or {}
+            point_scope = payload.get("scope", "user").lower()
+            if scope and point_scope != scope.lower():
+                continue
+
             created_at = payload.get("created_at", "")
             last_accessed_at = payload.get("last_accessed_at")
             access_count = payload.get("access_count", 0)
@@ -244,7 +248,7 @@ class MemoryService:
                     user_id=payload.get("user_id", user_id),
                     fact=payload.get("fact", ""),
                     category=payload.get("category", "other"),
-                    scope=payload.get("scope", "user"),
+                    scope=point_scope,
                     session_id=payload.get("session_id"),
                     workspace_id=payload.get("workspace_id"),
                     created_at=created_at,
@@ -285,23 +289,16 @@ class MemoryService:
         scope: Optional[str] = None,
     ) -> List[MemoryRecord]:
         """Retrieves all active memory records with freshness metadata and scope filtering."""
-        filter_conditions = [
-            rest_models.FieldCondition(
-                key="user_id",
-                match=rest_models.MatchValue(value=user_id),
-            )
-        ]
-        if scope:
-            filter_conditions.append(
-                rest_models.FieldCondition(
-                    key="scope",
-                    match=rest_models.MatchValue(value=scope.lower()),
-                )
-            )
-
         points, _ = self.db.client.scroll(
             collection_name=self.collection_name,
-            scroll_filter=rest_models.Filter(must=filter_conditions),
+            scroll_filter=rest_models.Filter(
+                must=[
+                    rest_models.FieldCondition(
+                        key="user_id",
+                        match=rest_models.MatchValue(value=user_id),
+                    )
+                ]
+            ),
             limit=limit,
             with_payload=True,
             with_vectors=False,
@@ -310,6 +307,10 @@ class MemoryService:
         records = []
         for point in points:
             payload = point.payload or {}
+            point_scope = payload.get("scope", "user").lower()
+            if scope and point_scope != scope.lower():
+                continue
+
             created_at = payload.get("created_at", "")
             last_accessed_at = payload.get("last_accessed_at")
             access_count = payload.get("access_count", 0)
@@ -326,6 +327,9 @@ class MemoryService:
                     user_id=payload.get("user_id", user_id),
                     fact=payload.get("fact", ""),
                     category=payload.get("category", "other"),
+                    scope=point_scope,
+                    session_id=payload.get("session_id"),
+                    workspace_id=payload.get("workspace_id"),
                     created_at=created_at,
                     updated_at=payload.get("updated_at"),
                     last_accessed_at=last_accessed_at,
