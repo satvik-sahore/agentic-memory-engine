@@ -11,9 +11,16 @@ Your mission is to extract durable, persistent, and actionable facts about the u
 Guidelines:
 1. ATOMIC & SELF-CONTAINED: Each fact must be a standalone statement in third person (e.g., "User prefers Python over JavaScript", "User is building an AI memory engine", "User lives in Berlin").
 2. DURABLE & VALUABLE: Focus on user preferences, skills, technical stacks, background, goals, personal traits, and strict constraints.
-3. IGNORE NOISE: Do NOT extract temporary conversational noise, greetings, transient task instructions (e.g. "Fix line 20"), or pleasantries ("Thanks", "Hello").
-4. NO DUPLICATE FACTS: Combine related statements into crisp, atomic points.
-5. If no durable user facts are present in the conversation, return an empty list of facts.
+3. CATEGORIZATION: Classify each fact into one of these exact categories:
+   - 'profile': Identity, name, age, location, residence, education, job role.
+   - 'preference': Work habits, coding style, tool/framework preferences (e.g. "prefers dark mode").
+   - 'skill': Languages, technologies, tools, and technical proficiencies.
+   - 'project': Active projects, architectures, applications, and goals.
+   - 'constraint': Strict limitations, rules, budget, or architectural constraints.
+   - 'other': Any other durable fact.
+4. IGNORE NOISE: Do NOT extract temporary conversational noise, greetings, transient task instructions (e.g. "Fix line 20"), or pleasantries ("Thanks", "Hello").
+5. NO DUPLICATE FACTS: Combine related statements into crisp, atomic points.
+6. If no durable user facts are present in the conversation, return an empty list of facts.
 """
 
 

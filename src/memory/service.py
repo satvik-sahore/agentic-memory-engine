@@ -79,12 +79,18 @@ class MemoryService:
         now_str = datetime.now(timezone.utc).isoformat()
 
         for op in operations:
+            cat = getattr(op, "category", "other") or "other"
+            if hasattr(cat, "value"):
+                cat = cat.value
+            cat = str(cat).lower()
+
             if op.operation == MemoryOperationType.ADD:
                 point_id = str(uuid.uuid4())
                 vector = self.llm.embed_text(op.fact)
                 payload = {
                     "user_id": user_id,
                     "fact": op.fact,
+                    "category": cat,
                     "created_at": now_str,
                     "updated_at": now_str,
                     "last_accessed_at": now_str,
@@ -101,13 +107,14 @@ class MemoryService:
                     ],
                 )
                 affected += 1
-                logger.info(f"Inserted new memory [{point_id}]: {op.fact}")
+                logger.info(f"Inserted new memory [{point_id}] ({cat}): {op.fact}")
 
             elif op.operation == MemoryOperationType.UPDATE and op.target_memory_id:
                 vector = self.llm.embed_text(op.fact)
                 payload = {
                     "user_id": user_id,
                     "fact": op.fact,
+                    "category": cat,
                     "updated_at": now_str,
                     "last_accessed_at": now_str,
                     "access_count": 0,
@@ -124,7 +131,7 @@ class MemoryService:
                     ],
                 )
                 affected += 1
-                logger.info(f"Updated memory [{op.target_memory_id}]: {op.fact}")
+                logger.info(f"Updated memory [{op.target_memory_id}] ({cat}): {op.fact}")
 
             elif op.operation == MemoryOperationType.DELETE and op.target_memory_id:
                 self.db.client.delete(

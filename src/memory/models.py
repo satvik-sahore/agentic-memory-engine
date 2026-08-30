@@ -42,6 +42,7 @@ class MemoryOperation(BaseModel):
     """A single reconciliation action resolved by the LLM."""
     operation: MemoryOperationType = Field(description="Action to take (ADD, UPDATE, DELETE, NOOP).")
     fact: str = Field(description="The fact text to add or updated content.")
+    category: str = Field(default="other", description="Category classification (profile, preference, skill, project, constraint, other).")
     target_memory_id: Optional[str] = Field(
         default=None,
         description="The ID of the existing memory to UPDATE or DELETE (null for ADD/NOOP).",
