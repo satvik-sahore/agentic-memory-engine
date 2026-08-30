@@ -12,6 +12,8 @@ from src.config import settings
 from src.db.qdrant import qdrant_manager
 from src.api.routes import router as memory_router
 from src.api.chat import router as chat_router
+from src.api.graph import router as graph_router
+from src.memory.queue import async_memory_queue
 
 # Configure logging
 logging.basicConfig(
@@ -29,8 +31,11 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing Self-Learning AI Agent Memory Engine...")
     is_ready = qdrant_manager.ensure_collection()
     logger.info(f"Vector Database status: {'Ready' if qdrant_manager.is_healthy() else 'Unavailable'}")
+    # Start async background ingestion queue worker
+    async_memory_queue.start()
     yield
     logger.info("Shutting down Memory Engine...")
+    await async_memory_queue.stop()
     qdrant_manager.close()
 
 
@@ -60,6 +65,7 @@ if STATIC_DIR.exists():
 # Include Routers
 app.include_router(memory_router)
 app.include_router(chat_router)
+app.include_router(graph_router)
 
 
 @app.get("/", tags=["System"])

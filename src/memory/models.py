@@ -13,12 +13,34 @@ class FactCategory(str, Enum):
     OTHER = "other"
 
 
+class MemoryScope(str, Enum):
+    """Hierarchical scope tiers for memory isolation and lifecycle management."""
+    USER = "user"            # Persistent personal facts across all sessions
+    SESSION = "session"      # Ephemeral active conversation / task working memory
+    WORKSPACE = "workspace"  # Shared team / repository / organizational rules
+
+
+class EntityTriple(BaseModel):
+    """Knowledge graph entity-relation triple (Subject -> Relation -> Object)."""
+    subject: str = Field(description="The source entity (e.g., 'User', 'FastAPI', 'Qdrant').")
+    relation: str = Field(description="The directed predicate relation (e.g., 'lives_in', 'uses', 'prefers').")
+    object: str = Field(description="The target entity or value (e.g., 'Providence', 'Python', 'Dark Mode').")
+
+
 class Fact(BaseModel):
     """An atomic, durable fact extracted from conversation."""
     text: str = Field(description="The self-contained, standalone fact statement.")
     category: FactCategory = Field(
         default=FactCategory.OTHER,
         description="Category classification for the fact.",
+    )
+    scope: MemoryScope = Field(
+        default=MemoryScope.USER,
+        description="Scope tier for the memory (user, session, workspace).",
+    )
+    triples: List[EntityTriple] = Field(
+        default_factory=list,
+        description="Extracted graph entity triples for GraphRAG topological retrieval.",
     )
 
 
@@ -43,6 +65,8 @@ class MemoryOperation(BaseModel):
     operation: MemoryOperationType = Field(description="Action to take (ADD, UPDATE, DELETE, NOOP).")
     fact: str = Field(description="The fact text to add or updated content.")
     category: str = Field(default="other", description="Category classification (profile, preference, skill, project, constraint, other).")
+    scope: MemoryScope = Field(default=MemoryScope.USER, description="Scope tier for the memory.")
+    triples: List[EntityTriple] = Field(default_factory=list, description="Knowledge graph triples.")
     target_memory_id: Optional[str] = Field(
         default=None,
         description="The ID of the existing memory to UPDATE or DELETE (null for ADD/NOOP).",
@@ -64,6 +88,10 @@ class MemoryRecord(BaseModel):
     user_id: str
     fact: str
     category: str = "other"
+    scope: str = "user"
+    session_id: Optional[str] = None
+    workspace_id: Optional[str] = None
+    triples: List[EntityTriple] = Field(default_factory=list)
     created_at: str
     updated_at: Optional[str] = None
     last_accessed_at: Optional[str] = None

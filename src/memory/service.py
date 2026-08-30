@@ -15,6 +15,7 @@ from src.memory.models import (
     MemoryRecord,
     MemoryOperationType,
     MemoryOperation,
+    MemoryScope,
     AddMemoryResponse,
     SearchMemoryResponse,
 )
@@ -38,11 +39,14 @@ class MemoryService:
         self,
         user_id: str,
         conversation: Union[str, List[Dict[str, Any]]],
+        scope: MemoryScope = MemoryScope.USER,
+        session_id: Optional[str] = None,
+        workspace_id: Optional[str] = None,
     ) -> AddMemoryResponse:
         """
         Executes the two-phase pipeline:
-        1. Extract candidate facts from the conversation.
-        2. Query existing memories for the user.
+        1. Extract atomic facts and entity triples from conversation.
+        2. Query existing memories for the user and scope.
         3. Reconcile differences (ADD / UPDATE / DELETE / NOOP).
         4. Mutate Qdrant vector store.
         """
@@ -55,8 +59,12 @@ class MemoryService:
                 memories_affected=0,
             )
 
+        # Apply target scope to extracted facts
+        for f in extracted_facts:
+            f.scope = scope
+
         # Step 2: Retrieve existing memories for this user
-        existing_memories = self.get_all_memories(user_id=user_id)
+        existing_memories = self.get_all_memories(user_id=user_id, scope=scope.value)
 
         # Step 3: Reconcile changes
         operations = self.reconciler.reconcile(
@@ -65,7 +73,13 @@ class MemoryService:
         )
 
         # Step 4: Apply operations in Qdrant
-        affected_count = self._apply_operations(user_id=user_id, operations=operations)
+        affected_count = self._apply_operations(
+            user_id=user_id,
+            operations=operations,
+            scope=scope,
+            session_id=session_id,
+            workspace_id=workspace_id,
+        )
 
         return AddMemoryResponse(
             user_id=user_id,
@@ -73,7 +87,14 @@ class MemoryService:
             memories_affected=affected_count,
         )
 
-    def _apply_operations(self, user_id: str, operations: List[MemoryOperation]) -> int:
+    def _apply_operations(
+        self,
+        user_id: str,
+        operations: List[MemoryOperation],
+        scope: MemoryScope = MemoryScope.USER,
+        session_id: Optional[str] = None,
+        workspace_id: Optional[str] = None,
+    ) -> int:
         """Executes the reconciliation operations against Qdrant."""
         affected = 0
         now_str = datetime.now(timezone.utc).isoformat()
@@ -84,6 +105,8 @@ class MemoryService:
                 cat = cat.value
             cat = str(cat).lower()
 
+            scope_val = op.scope.value if hasattr(op.scope, "value") else str(op.scope).lower()
+
             if op.operation == MemoryOperationType.ADD:
                 point_id = str(uuid.uuid4())
                 vector = self.llm.embed_text(op.fact)
@@ -91,6 +114,9 @@ class MemoryService:
                     "user_id": user_id,
                     "fact": op.fact,
                     "category": cat,
+                    "scope": scope_val,
+                    "session_id": session_id,
+                    "workspace_id": workspace_id,
                     "created_at": now_str,
                     "updated_at": now_str,
                     "last_accessed_at": now_str,
@@ -107,7 +133,7 @@ class MemoryService:
                     ],
                 )
                 affected += 1
-                logger.info(f"Inserted new memory [{point_id}] ({cat}): {op.fact}")
+                logger.info(f"Inserted new memory [{point_id}] ({cat}|{scope_val}): {op.fact}")
 
             elif op.operation == MemoryOperationType.UPDATE and op.target_memory_id:
                 vector = self.llm.embed_text(op.fact)
@@ -115,6 +141,9 @@ class MemoryService:
                     "user_id": user_id,
                     "fact": op.fact,
                     "category": cat,
+                    "scope": scope_val,
+                    "session_id": session_id,
+                    "workspace_id": workspace_id,
                     "updated_at": now_str,
                     "last_accessed_at": now_str,
                     "access_count": 0,
@@ -131,7 +160,7 @@ class MemoryService:
                     ],
                 )
                 affected += 1
-                logger.info(f"Updated memory [{op.target_memory_id}] ({cat}): {op.fact}")
+                logger.info(f"Updated memory [{op.target_memory_id}] ({cat}|{scope_val}): {op.fact}")
 
             elif op.operation == MemoryOperationType.DELETE and op.target_memory_id:
                 self.db.client.delete(
@@ -152,27 +181,34 @@ class MemoryService:
         query: str,
         limit: int = 5,
         score_threshold: Optional[float] = None,
+        scope: Optional[str] = None,
     ) -> List[MemoryRecord]:
         """
         Performs semantic vector search blended with Ebbinghaus temporal decay recency weighting.
-        Also performs spaced repetition reinforcement on retrieved memories.
+        Supports multi-tier scope filtering (user, session, workspace).
         """
         threshold = score_threshold if score_threshold is not None else settings.similarity_threshold
         query_vector = self.llm.embed_text(query)
 
-        # Retrieve a slightly wider pool of candidates to re-rank with temporal decay
+        filter_conditions = [
+            rest_models.FieldCondition(
+                key="user_id",
+                match=rest_models.MatchValue(value=user_id),
+            )
+        ]
+        if scope:
+            filter_conditions.append(
+                rest_models.FieldCondition(
+                    key="scope",
+                    match=rest_models.MatchValue(value=scope.lower()),
+                )
+            )
+
         fetch_limit = max(limit * 2, 10)
         results = self.db.client.query_points(
             collection_name=self.collection_name,
             query=query_vector,
-            query_filter=rest_models.Filter(
-                must=[
-                    rest_models.FieldCondition(
-                        key="user_id",
-                        match=rest_models.MatchValue(value=user_id),
-                    )
-                ]
-            ),
+            query_filter=rest_models.Filter(must=filter_conditions),
             limit=fetch_limit,
             score_threshold=threshold,
         )
@@ -208,6 +244,9 @@ class MemoryService:
                     user_id=payload.get("user_id", user_id),
                     fact=payload.get("fact", ""),
                     category=payload.get("category", "other"),
+                    scope=payload.get("scope", "user"),
+                    session_id=payload.get("session_id"),
+                    workspace_id=payload.get("workspace_id"),
                     created_at=created_at,
                     updated_at=payload.get("updated_at"),
                     last_accessed_at=last_accessed_at,
@@ -239,18 +278,30 @@ class MemoryService:
 
         return top_records
 
-    def get_all_memories(self, user_id: str, limit: int = 100) -> List[MemoryRecord]:
-        """Retrieves all active memory records with freshness metadata for a given user."""
+    def get_all_memories(
+        self,
+        user_id: str,
+        limit: int = 100,
+        scope: Optional[str] = None,
+    ) -> List[MemoryRecord]:
+        """Retrieves all active memory records with freshness metadata and scope filtering."""
+        filter_conditions = [
+            rest_models.FieldCondition(
+                key="user_id",
+                match=rest_models.MatchValue(value=user_id),
+            )
+        ]
+        if scope:
+            filter_conditions.append(
+                rest_models.FieldCondition(
+                    key="scope",
+                    match=rest_models.MatchValue(value=scope.lower()),
+                )
+            )
+
         points, _ = self.db.client.scroll(
             collection_name=self.collection_name,
-            scroll_filter=rest_models.Filter(
-                must=[
-                    rest_models.FieldCondition(
-                        key="user_id",
-                        match=rest_models.MatchValue(value=user_id),
-                    )
-                ]
-            ),
+            scroll_filter=rest_models.Filter(must=filter_conditions),
             limit=limit,
             with_payload=True,
             with_vectors=False,

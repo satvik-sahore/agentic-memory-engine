@@ -1,5 +1,6 @@
 /**
  * Self-Learning AI Agent: Frontend Client Application Logic
+ * Supports Cards View, Interactive Force-Directed GraphRAG Explorer, and Multi-Tier Scopes.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -10,15 +11,32 @@ document.addEventListener('DOMContentLoaded', () => {
   const chatInput = document.getElementById('chatInput');
   const memoryList = document.getElementById('memoryList');
   const searchInput = document.getElementById('searchInput');
+  const searchContainer = document.getElementById('searchContainer');
   const memoryCountBadge = document.getElementById('memoryCountBadge');
   const btnRefreshMemories = document.getElementById('btnRefreshMemories');
   const btnClearMemories = document.getElementById('btnClearMemories');
   const dbStatusText = document.getElementById('dbStatusText');
   const toastContainer = document.getElementById('toastContainer');
 
+  // View Switcher & Scope Elements
+  const btnViewCards = document.getElementById('btnViewCards');
+  const btnViewGraph = document.getElementById('btnViewGraph');
+  const graphContainer = document.getElementById('graphContainer');
+  const graphCanvas = document.getElementById('graphCanvas');
+  const scopePills = document.querySelectorAll('.scope-pill');
+
   let currentUserId = userSelect.value;
+  let currentScope = 'all';
+  let currentView = 'cards'; // 'cards' | 'graph'
   let chatHistory = [];
   let isSearching = false;
+
+  // Graph Simulation State
+  let graphData = { nodes: [], edges: [] };
+  let graphNodes = [];
+  let graphEdges = [];
+  let draggedNode = null;
+  let animationFrameId = null;
 
   // Initialize
   init();
@@ -27,6 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
     checkHealth();
     loadUserMemories(currentUserId);
     bindEvents();
+    setupCanvas();
   }
 
   function bindEvents() {
@@ -56,8 +75,41 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
         </div>
       `;
-      loadUserMemories(currentUserId);
+      refreshActiveView();
       showToast(`👤 Active user set to: ${currentUserId}`);
+    });
+
+    // View Switcher Tabs
+    btnViewCards.addEventListener('click', () => {
+      currentView = 'cards';
+      btnViewCards.classList.add('active');
+      btnViewGraph.classList.remove('active');
+      memoryList.style.display = 'flex';
+      searchContainer.style.display = 'block';
+      graphContainer.style.display = 'none';
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      loadUserMemories(currentUserId);
+    });
+
+    btnViewGraph.addEventListener('click', () => {
+      currentView = 'graph';
+      btnViewGraph.classList.add('active');
+      btnViewCards.classList.remove('active');
+      memoryList.style.display = 'none';
+      searchContainer.style.display = 'none';
+      graphContainer.style.display = 'flex';
+      loadUserKnowledgeGraph(currentUserId);
+    });
+
+    // Scope Filter Pills
+    scopePills.forEach((pill) => {
+      pill.addEventListener('click', () => {
+        scopePills.forEach((p) => p.classList.remove('active'));
+        pill.classList.add('active');
+        currentScope = pill.getAttribute('data-scope');
+        refreshActiveView();
+        showToast(`🗂️ Scope filtered to: ${currentScope.toUpperCase()}`);
+      });
     });
 
     // Chat Form Submit
@@ -67,7 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btnRefreshMemories.addEventListener('click', () => {
       searchInput.value = '';
       isSearching = false;
-      loadUserMemories(currentUserId);
+      refreshActiveView();
       showToast('🔄 Memory bank refreshed');
     });
 
@@ -82,7 +134,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         if (res.ok) {
           showToast(`🗑️ Cleared all memories for ${currentUserId}`);
-          loadUserMemories(currentUserId);
+          refreshActiveView();
         }
       } catch (err) {
         showToast(`❌ Error clearing memories: ${err.message}`);
@@ -105,6 +157,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function refreshActiveView() {
+    if (currentView === 'cards') {
+      loadUserMemories(currentUserId);
+    } else {
+      loadUserKnowledgeGraph(currentUserId);
+    }
+  }
+
   // Health check
   async function checkHealth() {
     try {
@@ -124,7 +184,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Load All Memories for User
   async function loadUserMemories(userId) {
     try {
-      const res = await fetch(`/v1/memories/user/${encodeURIComponent(userId)}`);
+      let url = `/v1/memories/user/${encodeURIComponent(userId)}`;
+      if (currentScope !== 'all') {
+        url += `?scope=${encodeURIComponent(currentScope)}`;
+      }
+      const res = await fetch(url);
       if (!res.ok) throw new Error('Failed to load memories');
       const memories = await res.json();
       renderMemoryCards(memories);
@@ -137,7 +201,11 @@ document.addEventListener('DOMContentLoaded', () => {
   async function performSemanticSearch(query) {
     isSearching = true;
     try {
-      const res = await fetch(`/v1/memories/search?user_id=${encodeURIComponent(currentUserId)}&query=${encodeURIComponent(query)}&limit=10&score_threshold=0.3`);
+      let url = `/v1/memories/search?user_id=${encodeURIComponent(currentUserId)}&query=${encodeURIComponent(query)}&limit=10&score_threshold=0.3`;
+      if (currentScope !== 'all') {
+        url += `&scope=${encodeURIComponent(currentScope)}`;
+      }
+      const res = await fetch(url);
       if (!res.ok) throw new Error('Search failed');
       const data = await res.json();
       renderMemoryCards(data.results, true);
@@ -165,6 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     memoryList.innerHTML = memories.map((m) => {
       const cat = m.category ? m.category.toLowerCase() : 'other';
+      const scopeTag = (m.scope || 'user').toUpperCase();
       const freshness = m.freshness_label || '🔥 Fresh';
       let simHtml = '';
 
@@ -184,8 +253,9 @@ document.addEventListener('DOMContentLoaded', () => {
       return `
         <div class="memory-card" data-id="${m.id}">
           <div class="memory-header">
-            <div style="display: flex; align-items: center; gap: 0.4rem;">
+            <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
               <span class="category-tag ${cat}">${cat}</span>
+              <span class="category-tag" style="background: rgba(255,255,255,0.05); color: var(--text-dim);">${scopeTag}</span>
               <span class="freshness-badge">${freshness}</span>
             </div>
             <button class="btn-delete-mem" onclick="window.deleteSingleMemory('${m.id}')" title="Delete fact">
@@ -209,10 +279,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch(`/v1/memories/${encodeURIComponent(memoryId)}`, { method: 'DELETE' });
       if (res.ok) {
         showToast('🗑️ Memory record removed.');
-        if (isSearching) {
-          performSemanticSearch(searchInput.value);
+        if (currentView === 'cards') {
+          if (isSearching) {
+            performSemanticSearch(searchInput.value);
+          } else {
+            loadUserMemories(currentUserId);
+          }
         } else {
-          loadUserMemories(currentUserId);
+          loadUserKnowledgeGraph(currentUserId);
         }
       }
     } catch (e) {
@@ -247,11 +321,11 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify({
           user_id: currentUserId,
           message: message,
+          scope: currentScope === 'all' ? 'user' : currentScope,
           history: chatHistory,
         }),
       });
 
-      // Remove typing bubble
       document.getElementById(typingId)?.remove();
 
       if (!res.ok) {
@@ -267,17 +341,12 @@ document.addEventListener('DOMContentLoaded', () => {
       chatHistory.push({ role: 'user', content: message });
       chatHistory.push({ role: 'assistant', content: data.reply });
 
-      // Notify of any new operations performed
-      if (data.operations_performed && data.operations_performed.length > 0) {
-        for (const op of data.operations_performed) {
-          if (op.operation !== 'NOOP') {
-            showToast(`⚡ [${op.operation}] ${op.fact}`);
-          }
-        }
-        // Auto-refresh memory bank
-        if (!isSearching) {
-          loadUserMemories(currentUserId);
-        }
+      if (data.async_job_id) {
+        showToast(`⚡ Enqueued async memory job`);
+        // Trigger gentle auto-refresh after background worker completes
+        setTimeout(() => {
+          refreshActiveView();
+        }, 1500);
       }
 
     } catch (err) {
@@ -318,6 +387,214 @@ document.addEventListener('DOMContentLoaded', () => {
     chatMessages.scrollTop = chatMessages.scrollHeight;
   }
 
+  // ============================================================================
+  // 🕸️ Interactive Knowledge Graph Visualizer (HTML5 Canvas Force Physics)
+  // ============================================================================
+
+  async function loadUserKnowledgeGraph(userId) {
+    try {
+      let url = `/v1/graph/${encodeURIComponent(userId)}`;
+      if (currentScope !== 'all') {
+        url += `?scope=${encodeURIComponent(currentScope)}`;
+      }
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Failed to load knowledge graph');
+      graphData = await res.json();
+      memoryCountBadge.textContent = `${graphData.nodes.length} nodes`;
+      initGraphSimulation(graphData);
+    } catch (err) {
+      showToast(`Graph error: ${err.message}`);
+    }
+  }
+
+  function setupCanvas() {
+    const resize = () => {
+      if (graphContainer.clientWidth > 0 && graphContainer.clientHeight > 0) {
+        graphCanvas.width = graphContainer.clientWidth;
+        graphCanvas.height = graphContainer.clientHeight;
+      }
+    };
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Mouse Interaction for Dragging Nodes
+    graphCanvas.addEventListener('mousedown', (e) => {
+      const rect = graphCanvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      for (let n of graphNodes) {
+        const dist = Math.hypot(n.x - x, n.y - y);
+        if (dist <= n.radius + 6) {
+          draggedNode = n;
+          break;
+        }
+      }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!draggedNode) return;
+      const rect = graphCanvas.getBoundingClientRect();
+      draggedNode.x = e.clientX - rect.left;
+      draggedNode.y = e.clientY - rect.top;
+      draggedNode.vx = 0;
+      draggedNode.vy = 0;
+    });
+
+    window.addEventListener('mouseup', () => {
+      draggedNode = null;
+    });
+  }
+
+  function initGraphSimulation(data) {
+    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+
+    const width = graphCanvas.width || 500;
+    const height = graphCanvas.height || 400;
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    // Initialize node positions in a radial circle
+    const numNodes = data.nodes.length;
+    graphNodes = data.nodes.map((n, i) => {
+      const angle = (i / Math.max(numNodes, 1)) * Math.PI * 2;
+      const r = n.type === 'user' ? 0 : 100 + Math.random() * 80;
+      return {
+        ...n,
+        x: centerX + Math.cos(angle) * r,
+        y: centerY + Math.sin(angle) * r,
+        vx: 0,
+        vy: 0,
+        radius: n.size || 14,
+      };
+    });
+
+    // Map Edges
+    const nodeById = new Map(graphNodes.map(n => [n.id, n]));
+    graphEdges = data.edges.map(e => ({
+      ...e,
+      sourceNode: nodeById.get(e.source),
+      targetNode: nodeById.get(e.target),
+    })).filter(e => e.sourceNode && e.targetNode);
+
+    // Run Physics Animation Loop
+    runSimulationLoop();
+  }
+
+  function runSimulationLoop() {
+    const ctx = graphCanvas.getContext('2d');
+    const width = graphCanvas.width;
+    const height = graphCanvas.height;
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    function step() {
+      // 1. Clear Canvas
+      ctx.clearRect(0, 0, width, height);
+
+      // 2. Compute Forces
+      // Repulsion between all nodes (Coulomb)
+      for (let i = 0; i < graphNodes.length; i++) {
+        for (let j = i + 1; j < graphNodes.length; j++) {
+          const n1 = graphNodes[i];
+          const n2 = graphNodes[j];
+          const dx = n2.x - n1.x;
+          const dy = n2.y - n1.y;
+          const dist = Math.max(Math.hypot(dx, dy), 1);
+          const force = (8000 / (dist * dist));
+          const fx = (dx / dist) * force;
+          const fy = (dy / dist) * force;
+
+          if (n1 !== draggedNode) { n1.vx -= fx; n1.vy -= fy; }
+          if (n2 !== draggedNode) { n2.vx += fx; n2.vy += fy; }
+        }
+      }
+
+      // Spring attraction on edges (Hooke's Law)
+      for (let edge of graphEdges) {
+        const s = edge.sourceNode;
+        const t = edge.targetNode;
+        const dx = t.x - s.x;
+        const dy = t.y - s.y;
+        const dist = Math.hypot(dx, dy);
+        const desiredDist = 130;
+        const springForce = (dist - desiredDist) * 0.04;
+        const fx = (dx / dist) * springForce;
+        const fy = (dy / dist) * springForce;
+
+        if (s !== draggedNode) { s.vx += fx; s.vy += fy; }
+        if (t !== draggedNode) { t.vx -= fx; t.vy -= fy; }
+      }
+
+      // Centering Gravity
+      for (let n of graphNodes) {
+        if (n !== draggedNode) {
+          n.vx += (centerX - n.x) * 0.015;
+          n.vy += (centerY - n.y) * 0.015;
+          n.vx *= 0.85; // Damping
+          n.vy *= 0.85;
+          n.x += n.vx;
+          n.y += n.vy;
+        }
+      }
+
+      // 3. Draw Edges
+      for (let edge of graphEdges) {
+        const s = edge.sourceNode;
+        const t = edge.targetNode;
+
+        // Line
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(99, 102, 241, 0.25)';
+        ctx.lineWidth = 2;
+        ctx.moveTo(s.x, s.y);
+        ctx.lineTo(t.x, t.y);
+        ctx.stroke();
+
+        // Edge Label Tag
+        if (edge.label) {
+          const midX = (s.x + t.x) / 2;
+          const midY = (s.y + t.y) / 2;
+          ctx.font = '10px JetBrains Mono, monospace';
+          ctx.fillStyle = '#94a3b8';
+          ctx.textAlign = 'center';
+          ctx.fillText(edge.label, midX, midY - 4);
+        }
+      }
+
+      // 4. Draw Nodes
+      for (let n of graphNodes) {
+        // Glowing Halo
+        const grad = ctx.createRadialGradient(n.x, n.y, n.radius * 0.5, n.x, n.y, n.radius * 1.8);
+        grad.addColorStop(0, n.color || '#6366f1');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.beginPath();
+        ctx.fillStyle = grad;
+        ctx.arc(n.x, n.y, n.radius * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Node Circle
+        ctx.beginPath();
+        ctx.fillStyle = n.color || '#6366f1';
+        ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Label
+        ctx.font = '11px Outfit, sans-serif';
+        ctx.fillStyle = '#f8fafc';
+        ctx.textAlign = 'center';
+        ctx.fillText(n.label, n.x, n.y + n.radius + 14);
+      }
+
+      animationFrameId = requestAnimationFrame(step);
+    }
+
+    step();
+  }
+
   // Toast Notification Helper
   function showToast(message) {
     const toast = document.createElement('div');
@@ -333,7 +610,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 4000);
   }
 
-  // Utility to prevent XSS
   function escapeHtml(str) {
     if (!str) return '';
     return str

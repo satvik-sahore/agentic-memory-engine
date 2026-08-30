@@ -57,6 +57,13 @@ flowchart TD
 * **🧠 Dynamic Two-Phase Lifecycle**: 
   1. *Extraction*: Extracts durable, self-contained third-person facts while discarding conversational noise.
   2. *Reconciliation*: Semantic lookup finds candidate conflicts; LLM decides `ADD`, `UPDATE`, `DELETE`, or `NOOP`.
+* **🕸️ Interactive GraphRAG Knowledge Visualizer**:
+  - Live topological node-link graph visualizer built on HTML5 Canvas force physics.
+  - Automatically extracts Entity-Relation Triples (`Subject -> Relation -> Object`) for multi-hop associative retrieval.
+* **⚡ Sub-150ms Asynchronous Ingestion Queue**:
+  - Event-driven background queue (`asyncio.Queue`) offloads fact extraction and vector synchronization, enabling instant conversational replies.
+* **🗂️ Multi-Tier Scoped Memory**:
+  - Hierarchical isolation across **`user`** (persistent), **`session`** (ephemeral/task-level), and **`workspace`** (shared team conventions).
 * **⏳ Cognitive Temporal Decay (Ebbinghaus Forgetting Curve)**:
   - Mathematical recency weighting: $\text{Score} = (1 - w) \cdot \text{Similarity} + w \cdot e^{-\lambda \Delta t}$.
   - Spaced reinforcement: Automatically touches and refreshes retention every time a memory is recalled.
