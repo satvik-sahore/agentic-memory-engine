@@ -128,28 +128,46 @@ body {
 }
 
 .user-selector {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
-  padding: 0.35rem 0.75rem;
+  padding: 0 0.85rem;
   border-radius: var(--radius-full);
+  height: 36px;
+  box-sizing: border-box;
 }
 
 .user-selector label {
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-right: 0.45rem;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .user-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
   background: transparent;
-  color: var(--text-main);
+  color: #ffffff;
   border: none;
   font-family: inherit;
-  font-weight: 600;
+  font-size: 0.85rem;
+  font-weight: 700;
   outline: none;
   cursor: pointer;
+  padding: 0 1.35rem 0 0;
+  margin: 0;
+  height: 100%;
+  line-height: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 15 5 5 5-5'/%3E%3Cpath d='m7 9 5-5 5 5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right center;
 }
 
 .user-select option {
