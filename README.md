@@ -24,30 +24,36 @@ Traditional RAG and naive chat-history appending have critical flaws:
 
 ```mermaid
 flowchart TD
-    subgraph ClientLayer [Client Interfaces]
-        A1[User / Agent Conversation] --> B[FastAPI REST API /v1/memories]
-        A2[Claude Desktop / Cursor IDE] --> C[MCP Server stdio]
+    subgraph Ingestion ["1. Client Interfaces & Ingestion"]
+        A["💬 User / Agent Chat"] --> C["⚡ FastAPI REST API (/v1/chat)"]
+        B["🤖 Claude Desktop / Cursor IDE"] --> D["🔌 MCP 2.x Server (stdio)"]
+        C --> E["📥 Async Ingestion Queue (asyncio.Queue)"]
+        D --> E
     end
 
-    subgraph TwoPhasePipeline [Two-Phase Memory Engine]
-        B --> D[Phase 1: Fact Extractor]
-        C --> D
-        D -->|Extracts Atomic Facts| E[Candidate Facts]
+    subgraph TwoPhase ["2. Two-Phase Agentic State Machine"]
+        E --> F["🧠 Phase 1: Fact Extractor (LLM)"]
+        F -->|Atomic Facts & Triples| G["📋 Candidate Facts"]
+        
+        G --> H["🔍 Semantic Search Candidates"]
+        Q1[("💾 Qdrant Vector Store (Current State)")] -.->|Existing User Memories| H
+        
+        H --> I["⚖️ Phase 2: Conflict Reconciler (LLM)"]
+        G --> I
+        
+        I -->|State Mutation Decision| J{"Operation"}
+        J -->|ADD| K["✨ Insert New Vector Point"]
+        J -->|UPDATE| L["🔄 Overwrite Stale Vector & Payload"]
+        J -->|DELETE| M["🗑️ Delete Vector Point"]
+        J -->|NOOP| N["⏸️ Ignore Redundant Duplicate"]
+    end
 
-        E --> F[Semantic Retriever]
-        F -->|Vector Similarity Query| G[(Qdrant Vector DB)]
-        G -->|Existing User Memories| H[Phase 2: Conflict Reconciler]
-        E --> H
-
-        H -->|State Mutation Decisions| I{Operations}
-        I -->|ADD: New Fact| J[Generate Embedding & Insert]
-        I -->|UPDATE: Replace Fact ID| K[Update Vector Point & Payload]
-        I -->|DELETE: Obsolete Fact| L[Delete Vector Point]
-        I -->|NOOP: Duplicate| M[Do Nothing]
-
-        J --> G
-        K --> G
-        L --> G
+    subgraph Storage ["3. Storage & Knowledge Graph Layer"]
+        K --> Q2[("💾 Qdrant Vector DB (Synchronized State)")]
+        L --> Q2
+        M --> Q2
+        Q2 --> O["⏳ Ebbinghaus Temporal Decay & Spaced Reinforcement"]
+        Q2 --> P["🕸️ GraphRAG Topological Entity Visualizer"]
     end
 ```
 
